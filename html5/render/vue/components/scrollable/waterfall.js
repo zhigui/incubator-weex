@@ -87,6 +87,7 @@ export default {
       const slots = this.$slots.default || []
       this._headers = []
       this._others = []
+      this._footers = []
       this._cells = slots.filter(vnode => {
         if (!vnode.tag || !vnode.componentOptions) return false
         const tag = vnode.componentOptions.tag
@@ -95,7 +96,12 @@ export default {
           return false
         }
         if (tag === 'header') {
-          this._headers.push(vnode)
+          if (vnode.data.attrs && vnode.data.attrs['data-type'] === 'footer') {
+            this._footers.push(vnode)
+          }
+          else {
+            this._headers.push(vnode)
+          }
           return false
         }
         if (tag !== 'cell') {
@@ -115,6 +121,7 @@ export default {
         ref: 'columns',
         staticClass: 'weex-waterfall-inner-columns weex-ct'
       }, this._columns))
+      children = children.concat(this._footers)
       this._loading && children.push(this._loading)
       return [
         h('html:div', {
