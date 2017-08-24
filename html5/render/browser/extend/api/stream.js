@@ -80,8 +80,8 @@ function _jsonp (config, callback, progressCallback) {
 
 function _xhr (config, callback, progressCallback) {
   const xhr = new XMLHttpRequest()
-  xhr.responseType = config.type
   xhr.open(config.method, config.url, true)
+  xhr.responseType = config.type
 
   // cors cookie support
   if (config.withCredentials === true) {
