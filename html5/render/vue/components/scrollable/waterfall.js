@@ -24,7 +24,6 @@
 import { extractComponentStyle, createEventMap } from '../../core'
 import { scrollable } from '../../mixins'
 
-const NORMAL_GAP_SIZE = 32
 const DEFAULT_COLUMN_COUNT = 1
 
 export default {
@@ -73,15 +72,6 @@ export default {
       }
     }
   },
-
-  mounted () {
-    this._nextTick()
-  },
-
-  updated () {
-    this.$nextTick(this._nextTick())
-  },
-
   methods: {
     _createChildren (h, rootStyle) {
       const slots = this.$slots.default || []
@@ -110,17 +100,20 @@ export default {
         }
         return true
       })
-      this._reCalc(rootStyle)
-      this._genColumns(h)
+      // this._reCalc(rootStyle)
+      // this._genColumns(h)
+      this._genList(h)
       let children = []
       this._refresh && children.push(this._refresh)
       children = children
         .concat(this._headers)
         .concat(this._others)
       children.push(h('html:div', {
-        ref: 'columns',
-        staticClass: 'weex-waterfall-inner-columns weex-ct'
-      }, this._columns))
+        staticStyle: {
+          display: 'block',
+          dtaticClass: 'xcf-waterfall-list'
+        }
+      }, this._listCells))
       children = children.concat(this._footers)
       this._loading && children.push(this._loading)
       return [
@@ -130,124 +123,25 @@ export default {
         }, children)
       ]
     },
-
-    _reCalc (rootStyle) {
-      /**
-       * NOTE: columnGap and columnWidth can't both be auto.
-       * NOTE: the formula:
-       *  totalWidth = n * w + (n - 1) * gap
-       * 1. if columnCount = n then calc w
-       * 2. if columnWidth = w then calc n
-       * 3. if columnWidth = w and columnCount = n then calc totalWidth
-       *    3.1 if totalWidth < ctWidth then increase columnWidth
-       *    3.2 if totalWidth > ctWidth then decrease columnCount
-       */
-      let width, gap, cnt, ctWidth
-      const scale = weex.config.env.scale
-      const el = this.$el
-      function getCtWidth (width, style) {
-        const padding = style.padding
-          ? parseInt(style.padding) * 2
-          : parseInt(style.paddingLeft || 0) + parseInt(style.paddingRight || 0)
-        return width - padding
-      }
-      if (el && el.nodeType === 1) {  // already mounted
-        const cstyle = window.getComputedStyle(el)
-        ctWidth = getCtWidth(el.getBoundingClientRect().width, cstyle)
-      }
-      else {  // not mounted.
-        // only support full screen width for waterfall component.
-        ctWidth = getCtWidth(document.documentElement.clientWidth, rootStyle)
-      }
-
-      gap = this.columnGap
-      if (gap && gap !== 'normal') {
-        gap = parseInt(gap)
-      }
-      else {
-        gap = NORMAL_GAP_SIZE
-      }
-      gap = gap * scale
-
-      width = this.columnWidth
-      cnt = this.columnCount
-      if (width && width !== 'auto') {
-        width = parseInt(width) * scale
-      }
-      if (cnt && cnt !== 'auto') {
-        cnt = parseInt(cnt)
-      }
-
-      // 0. if !columnCount && !columnWidth
-      if (cnt === 'auto' && width === 'auto') {
-        if (process.env.NODE_ENV === 'development') {
-          console.warn(`[vue-render] waterfall's columnWidth and columnCount shouldn't`
-          + ` both be auto at the same time.`)
-          cnt = DEFAULT_COLUMN_COUNT
-          width = ctWidth
-        }
-      }
-      // 1. if columnCount = n then calc w.
-      else if (cnt !== 'auto' && width === 'auto') {
-        width = (ctWidth - (cnt - 1) * gap) / cnt
-      }
-      // 2. if columnWidth = w then calc n.
-      else if (cnt === 'auto' && width !== 'auto') {
-        cnt = (ctWidth + gap) / (width + gap)
-      }
-      // 3. if columnWidth = w and columnCount = n then calc totalWidth
-      else if (cnt !== 'auto' && width !== 'auto') {
-        let totalWidth
-        const adjustCountAndWidth = () => {
-          totalWidth = cnt * width + (cnt - 1) * gap
-          if (totalWidth < ctWidth) {
-            width += (ctWidth - totalWidth) / cnt
-          }
-          else if (totalWidth > ctWidth && cnt > 1) {
-            cnt--
-            adjustCountAndWidth()
-          }
-          else if (totalWidth > ctWidth) {  // cnt === 1
-            width = ctWidth
-          }
-        }
-        adjustCountAndWidth()
-      }
-      this._columnCount = cnt
-      this._columnWidth = width
-      this._columnGap = gap
-    },
-
-    _genColumns (createElement) {
-      this._columns = []
+    _genList (createElement) {
+      this._listCells = []
       const cells = this._cells
-      const columnCnt = this._columnCount
+      const columnCnt = this.columnCount
       const len = cells.length
-      const columnCells = this._columnCells = Array(columnCnt).join('.').split('.').map(function () { return [] })
-      // spread cells to the columns using simpole polling algorithm.
       for (let i = 0; i < len; i++) {
-        (cells[i].data.attrs || (cells[i].data.attrs = {}))['data-cell'] = i
-        columnCells[i % columnCnt].push(cells[i])
-      }
-      for (let i = 0; i < columnCnt; i++) {
-        this._columns.push(createElement('html:div', {
-          ref: `column${i}`,
-          attrs: {
-            'data-column': i
-          },
-          staticClass: 'weex-ct',
+        this._listCells.push(createElement('html:div', {
           staticStyle: {
-            width: this._columnWidth + 'px',
-            marginLeft: i === 0 ? 0 : this._columnGap + 'px'
+            display: 'inline-block',
+            width: 100 / columnCnt + '%',
+            zoom: 1,
+            letterSpacing: 'normal',
+            verticalAlign: 'top',
+            textRendering: 'auto',
+            float: 'left'
           }
-        }, columnCells[i]))
+        }, [cells[i]]))
       }
     },
-
-    _nextTick () {
-      this._reLayoutChildren()
-    },
-
     _reLayoutChildren () {
       /**
        * treat the shortest column bottom as the match standard.
@@ -317,9 +211,35 @@ export default {
       for (let i = 0; i < columnCnt; i++) {
         columnDoms[i].appendChild(columnAppendFragments[i])
       }
+    },
+
+    handleListScroll (event) {
+      this.handleScroll(event)
+
+      if (weex.utils.supportSticky()) {
+        return
+      }
+
+      const scrollTop = this.$el.scrollTop
+      const h = this.$children.filter(vm => {
+        // only apply sticky to a header element with a data-sticky attr
+        return vm.$refs.header && vm.$attrs && vm.$attrs['data-sticky']
+      })
+
+      if (h.length <= 0) {
+        return
+      }
+
+      for (let i = 0; i < h.length; i++) {
+        if (h[i].initTop < scrollTop) {
+          h[i].addSticky()
+        }
+        else {
+          h[i].removeSticky()
+        }
+      }
     }
   },
-
   render (createElement) {
     this.weexType = 'waterfall'
     this._cells = this.$slots.default || []
@@ -332,7 +252,7 @@ export default {
       ref: 'wrapper',
       attrs: { 'weex-type': 'waterfall' },
       on: createEventMap(this, {
-        scroll: this.handleScroll,
+        scroll: this.handleListScroll,
         touchstart: this.handleTouchStart,
         touchmove: this.handleTouchMove,
         touchend: this.handleTouchEnd
